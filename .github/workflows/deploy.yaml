@@ -1,0 +1,49 @@
+name: CI-CD-Docker-ECR
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Configure AWS
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Login to ECR
+        run: |
+          aws ecr get-login-password --region us-east-1 | \
+          docker login --username AWS --password-stdin \
+          349430015931.dkr.ecr.us-east-1.amazonaws.com
+
+      - name: Build Docker image
+        run: docker build -t myapp .
+
+      - name: Tag Docker image
+        run: |
+          docker tag myapp:latest \
+          349430015931.dkr.ecr.us-east-1.amazonaws.com/docker/project:latest
+
+      - name: Push Docker image
+        run: |
+          docker push \
+          349430015931.dkr.ecr.us-east-1.amazonaws.com/docker/project:latest
+
+          # Deploy to ECS
+      - name: Deploy to ECS
+        run: |
+          aws ecs update-service \
+          --cluster ${{ secrets.ECS_CLUSTER }} \
+          --service ${{ secrets.ECS_SERVICE }} \
+          --force-new-deployment \
+          --region ${{ secrets.AWS_REGION }}
