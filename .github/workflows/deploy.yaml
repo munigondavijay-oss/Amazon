@@ -32,9 +32,9 @@ jobs:
       - name: Tag Docker image
         run: |
           docker tag myapp:latest \
-          349430015931.dkr.ecr.us-east-1.amazonaws.com/docker/project:latest
+          438410424479.dkr.ecr.us-east-1.amazonaws.com/docker/project:latest
 
       - name: Push Docker image
         run: |
           docker push \
-          349430015931.dkr.ecr.us-east-1.amazonaws.com/docker/project:latest
+          438410424479.dkr.ecr.us-east-1.amazonaws.com/docker/project:latest
