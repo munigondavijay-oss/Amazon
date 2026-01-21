@@ -2,43 +2,39 @@ name: CI-CD-Docker-ECR
 
 on:
   push:
-    branches: [master]
-
-permissions:
-  id-token: write  # Required for OIDC
-  contents: read
+    branches:
+      - master
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
 
       - name: Configure AWS
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v2
         with:
-          role-to-assume: arn:aws:iam::349430015931:role/your-github-role  # Create this role with OIDC trust
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-1
 
       - name: Login to ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Build and push
-        env:
-          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          REPO: docker/project
-          IMAGE_TAG: ${{ github.sha }}
         run: |
-          docker build -t $REGISTRY/$REPO:$IMAGE_TAG -t $REGISTRY/$REPO:latest .
-          docker push $REGISTRY/$REPO:$IMAGE_TAG
-          docker push $REGISTRY/$REPO:latest
+          aws ecr get-login-password --region us-east-1 | \
+          docker login --username AWS --password-stdin \
+          349430015931.dkr.ecr.us-east-1.amazonaws.com
 
-      - name: Deploy to ECS
-        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
-        with:
-          task-definition: task-definition.json  # Update this file with new image URI via sed or script
-          service: ${{ secrets.ECS_SERVICE }}
-          cluster: ${{ secrets.ECS_CLUSTER }}
-          wait-for-service-stability: true
+      - name: Build Docker image
+        run: docker build -t myapp .
+
+      - name: Tag Docker image
+        run: |
+          docker tag myapp:latest \
+          349430015931.dkr.ecr.us-east-1.amazonaws.com/docker/project:latest
+
+      - name: Push Docker image
+        run: |
+          docker push \
+          349430015931.dkr.ecr.us-east-1.amazonaws.com/docker/project:latest
