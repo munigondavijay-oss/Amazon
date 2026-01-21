@@ -24,7 +24,7 @@ jobs:
         run: |
           aws ecr get-login-password --region us-east-1 | \
           docker login --username AWS --password-stdin \
-          349430015931.dkr.ecr.us-east-1.amazonaws.com
+          438410424479.dkr.ecr.us-east-1.amazonaws.com/project/cicd
 
       - name: Build Docker image
         run: docker build -t myapp .
