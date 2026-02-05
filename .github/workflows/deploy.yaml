@@ -36,10 +36,10 @@ jobs:
 
       - name: Push Docker image
         run: |
-          docker push \
-          438410424479.dkr.ecr.us-east-1.amazonaws.com/project/cicd:latest
-          - name: Update kubeconfig
-       run: |
+          docker push 438410424479.dkr.ecr.us-east-1.amazonaws.com/project/cicd:latest
+
+      - name: Update kubeconfig
+        run: |
           aws eks update-kubeconfig \
           --region us-east-1 \
           --name Amazon
@@ -47,13 +47,12 @@ jobs:
       - name: Deploy to EKS (Rolling Update)
         run: |
           kubectl set image deployment/my-app \
-          my-app=349430015931.dkr.ecr.us-west-1.amazonaws.com/k8s/project:${{ github.sha }}    
+          my-app=438410424479.dkr.ecr.us-east-1.amazonaws.com/project/cicd:latest
 
-      - name: Deploy to ECS 
-        run: | 
-          aws ecs update-service \ 
-          --cluster ${{ secrets.ECS_CLUSTER }} \ 
-          --service ${{ secrets.ECS_SERVICE }} \ 
-          --force-new-deployment \ 
-          --region ${{ secrets.AWS_REGION }} 
-
+      - name: Deploy to ECS
+        run: |
+          aws ecs update-service \
+          --cluster ${{ secrets.ECS_CLUSTER }} \
+          --service ${{ secrets.ECS_SERVICE }} \
+          --force-new-deployment \
+          --region ${{ secrets.AWS_REGION }}
