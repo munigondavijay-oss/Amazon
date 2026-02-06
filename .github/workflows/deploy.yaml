@@ -27,19 +27,22 @@ jobs:
           438410424479.dkr.ecr.us-east-1.amazonaws.com
 
       - name: Build Docker image
-        run: docker build -t myapp .
-
-      - name: Tag Docker image
         run: |
-          docker tag myapp:latest \
-          438410424479.dkr.ecr.us-east-1.amazonaws.com/project7:latest
+          docker build \
+          -t 438410424479.dkr.ecr.us-east-1.amazonaws.com/project7:${{ github.sha }} .
 
       - name: Push Docker image
         run: |
-          docker push 438410424479.dkr.ecr.us-east-1.amazonaws.com/project7:latest
+          docker push 438410424479.dkr.ecr.us-east-1.amazonaws.com/project7:${{ github.sha }}
 
-          - name: Update kubeconfig
-       run: |
+      - name: Install kubectl
+        run: |
+          curl -LO https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl
+          chmod +x kubectl
+          sudo mv kubectl /usr/local/bin/
+
+      - name: Update kubeconfig
+        run: |
           aws eks update-kubeconfig \
           --region us-east-1 \
           --name project-7-eks
@@ -47,6 +50,4 @@ jobs:
       - name: Deploy to EKS (Rolling Update)
         run: |
           kubectl set image deployment/my-app \
-          my-app=438410424479.dkr.ecr.us-east-1.amazonaws.com/project7:${{ github.sha }} 
-          
-     
+          my-app=438410424479.dkr.ecr.us-east-1.amazonaws.com/project7:${{ github.sha }}
