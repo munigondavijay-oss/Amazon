@@ -42,7 +42,7 @@ jobs:
        run: |
           aws eks update-kubeconfig \
           --region us-east-1 \
-          --name Amazon
+          --name project-7-eks
 
       - name: Deploy to EKS (Rolling Update)
         run: |
