@@ -1,0 +1,67 @@
+pipeline {
+    agent any
+
+    environment {
+        AWS_REGION = "ap-south-1"
+        ECR_REPO = "177556895605.dkr.ecr.ap-south-1.amazonaws.com/my-app-repo"
+        IMAGE_TAG = "${env.BUILD_NUMBER}"
+        CLUSTER_NAME = "eks-cloud"
+    }
+
+    stages {
+
+        stage('Checkout Code') {
+            steps {
+                git branch: 'master', url: 'https://github.com/munigondavijay-oss/Amazon.git'
+            }
+        }
+
+        stage('Build, Push & Deploy') {
+            steps {
+                withCredentials([[
+                    $class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: 'aws-credentials'
+                ]]) {
+
+                    sh '''
+                    echo "🔍 AWS Identity"
+                    aws sts get-caller-identity
+
+                    echo "🔐 Login to ECR"
+                    aws ecr get-login-password --region $AWS_REGION | \
+                    docker login --username AWS --password-stdin 177556895605.dkr.ecr.ap-south-1.amazonaws.com
+
+                    echo "🐳 Build Docker Image"
+                    docker build -t $ECR_REPO:$IMAGE_TAG .
+                    docker tag $ECR_REPO:$IMAGE_TAG $ECR_REPO:latest
+
+                    echo "📤 Push Docker Image"
+                    docker push $ECR_REPO:$IMAGE_TAG
+                    docker push $ECR_REPO:latest
+
+                    echo "☸️ Update kubeconfig"
+                    aws eks update-kubeconfig \
+                    --region $AWS_REGION \
+                    --name $CLUSTER_NAME
+
+                    echo "🚀 Deploy to EKS"
+                    kubectl set image deployment/my-app \
+                    my-app=$ECR_REPO:$IMAGE_TAG
+
+                    echo "⏳ Checking rollout status"
+                    kubectl rollout status deployment/my-app
+                    '''
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "✅ Deployment Successful!"
+        }
+        failure {
+            echo "❌ Deployment Failed!"
+        }
+    }
+}
