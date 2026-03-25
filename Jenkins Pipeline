@@ -3,53 +3,153 @@ pipeline {
 
     environment {
         AWS_REGION = "ap-south-1"
-        ECR_REPO = "177556895605.dkr.ecr.ap-south-1.amazonaws.com/my-app-repo"
-        IMAGE_TAG = "${env.BUILD_NUMBER}"
         CLUSTER_NAME = "eks-cloud"
+        ECR_REGISTRY = "177556895605.dkr.ecr.ap-south-1.amazonaws.com"
+        ECR_REPO = "${ECR_REGISTRY}/my-app-repo"
+        IMAGE_TAG = "${BUILD_NUMBER}"
+        SCANNER_HOME = tool 'sonar-scanner'
+    }
+
+    tools {
+        jdk 'jdk17'
     }
 
     stages {
 
+        // ========================
+        // Checkout Code
+        // ========================
         stage('Checkout Code') {
             steps {
                 git branch: 'master', url: 'https://github.com/munigondavijay-oss/Amazon.git'
             }
         }
 
-        stage('Build, Push & Deploy') {
+        // ========================
+        // Verify Files
+        // ========================
+        stage('Verify Files') {
+            steps {
+                sh '''
+                pwd
+                ls
+                ls k8s
+                '''
+            }
+        }
+
+        // ========================
+        // SonarQube Analysis
+        // ========================
+        stage('SonarQube Analysis') {
+            steps {
+                withSonarQubeEnv('sonarqube') {
+                    sh """
+                    ${SCANNER_HOME}/bin/sonar-scanner \
+                      -Dsonar.projectKey=my-app \
+                      -Dsonar.sources=.
+                    """
+                }
+            }
+        }
+
+        // ========================
+        // Quality Gate
+        // ========================
+        stage('Quality Gate') {
+            steps {
+                timeout(time: 2, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
+                }
+            }
+        }
+
+        // ========================
+        // Build Docker Image
+        // ========================
+        stage('Build Docker Image') {
+            steps {
+                sh """
+                docker build -t my-app:${IMAGE_TAG} .
+                docker tag my-app:${IMAGE_TAG} ${ECR_REPO}:${IMAGE_TAG}
+                """
+            }
+        }
+
+        // ========================
+        // Trivy Scan
+        // ========================
+        stage('Trivy Scan') {
+            steps {
+                sh """
+                trivy image --ignore-unfixed --severity CRITICAL --exit-code 1 ${ECR_REPO}:${IMAGE_TAG}
+                """
+            }
+        }
+
+        // ========================
+        // Login to AWS ECR
+        // ========================
+        stage('Login to AWS ECR') {
             steps {
                 withCredentials([[
                     $class: 'AmazonWebServicesCredentialsBinding',
                     credentialsId: 'aws-credentials'
                 ]]) {
+                    sh """
+                    aws ecr get-login-password --region ${AWS_REGION} | \
+                    docker login --username AWS --password-stdin ${ECR_REGISTRY}
+                    """
+                }
+            }
+        }
 
+        // ========================
+        // Push Image
+        // ========================
+        stage('Push Image to ECR') {
+            steps {
+                sh "docker push ${ECR_REPO}:${IMAGE_TAG}"
+            }
+        }
+
+        // ========================
+        // Deploy + Verify (ALL FIXED ✅)
+        // ========================
+        stage('Deploy to EKS') {
+            steps {
+                withCredentials([[
+                    $class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: 'aws-credentials'
+                ]]) {
                     sh '''
-                    echo "🔍 AWS Identity"
-                    aws sts get-caller-identity
+                    # Update kubeconfig
+                    aws eks --region ${AWS_REGION} update-kubeconfig --name ${CLUSTER_NAME}
 
-                    echo "🔐 Login to ECR"
-                    aws ecr get-login-password --region $AWS_REGION | \
-                    docker login --username AWS --password-stdin 177556895605.dkr.ecr.ap-south-1.amazonaws.com
+                    echo "Deploying image: ${ECR_REPO}:${IMAGE_TAG}"
 
-                    echo "🐳 Build Docker Image"
-                    docker build -t $ECR_REPO:$IMAGE_TAG .
-                    docker tag $ECR_REPO:$IMAGE_TAG $ECR_REPO:latest
+                    # Replace image
+                    sed "s|IMAGE_PLACEHOLDER|${ECR_REPO}:${IMAGE_TAG}|g" k8s/deployment.yaml > k8s/deployment-final.yaml
 
-                    echo "📤 Push Docker Image"
-                    docker push $ECR_REPO:$IMAGE_TAG
-                    docker push $ECR_REPO:latest
+                    # Apply manifests
+                    kubectl apply -f k8s/deployment-final.yaml
+                    kubectl apply -f k8s/service.yaml
 
-                    echo "☸️ Update kubeconfig"
-                    aws eks update-kubeconfig \
-                    --region $AWS_REGION \
-                    --name $CLUSTER_NAME
-
-                    echo "🚀 Deploy to EKS"
-                    kubectl set image deployment/my-app \
-                    my-app=$ECR_REPO:$IMAGE_TAG
-
-                    echo "⏳ Checking rollout status"
+                    # Wait for rollout
                     kubectl rollout status deployment/my-app
+
+                    # Verify resources
+                    kubectl get pods -o wide
+                    kubectl get svc
+
+                    # Health check (FIXED PORT ✅)
+                    POD=$(kubectl get pods -l app=my-app -o jsonpath="{.items[0].metadata.name}")
+                    echo "Testing pod: $POD"
+
+                    kubectl exec $POD -- curl -f localhost:80 || exit 1
+
+                    # Logs
+                    kubectl logs -l app=my-app --tail=20
                     '''
                 }
             }
@@ -58,10 +158,10 @@ pipeline {
 
     post {
         success {
-            echo "✅ Deployment Successful!"
+            echo "✅ Deployment Successful & Application is Healthy!"
         }
         failure {
-            echo "❌ Deployment Failed!"
+            echo "❌ Pipeline Failed! Check logs above."
         }
     }
 }
