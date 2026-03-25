@@ -16,4 +16,4 @@ spec:
       - name: my-app
         image: IMAGE_PLACEHOLDER   # Jenkins will replace this
         ports:
-        - containerPort: 3000   # 🔥 FIXED (was 8080)
+        - containerPort: 8080   # 🔥 FIXED (was 8080)
