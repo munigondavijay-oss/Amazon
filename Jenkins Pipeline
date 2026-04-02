@@ -2,9 +2,9 @@ pipeline {
     agent any
 
     environment {
-        AWS_REGION = "ap-south-1"
-        CLUSTER_NAME = "eks-cloud"
-        ECR_REGISTRY = "177556895605.dkr.ecr.ap-south-1.amazonaws.com"
+        AWS_REGION = "us-east-1"
+        CLUSTER_NAME = "eks-amazon-cluster"
+        ECR_REGISTRY = "667481408160.dkr.ecr.us-east-1.amazonaws.com"
         ECR_REPO = "${ECR_REGISTRY}/my-app-repo"
         IMAGE_TAG = "${BUILD_NUMBER}"
         SCANNER_HOME = tool 'sonar-scanner'
